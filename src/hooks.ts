@@ -149,14 +149,10 @@ export function useNotificationsStream(
   enabled: boolean,
   client?: NotificationsClient,
 ) {
-  const c = getClient(client);
-
   useEffect(() => {
     if (!enabled) return;
-    return subscribe(() => {
-      // Trigger refetch by notifying — consumer refetches via refetch()
-      // or re-mount. The subscribe callback is for cache invalidation
-      // which is handled by the consumer's data layer.
-    });
-  }, [enabled, subscribe, c]);
+    const c = client ?? getGlobalClient();
+    if (!c) return;
+    return subscribe(() => {});
+  }, [enabled, subscribe, client]);
 }
