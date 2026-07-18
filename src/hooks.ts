@@ -11,7 +11,8 @@ import type { Notification } from './types';
 // Global refetch bridge — mutations trigger list refetch without coupling
 // ============================================================================
 
-let _refetchNotifications: () => void = () => {};
+const _refetchFns = new Set<() => void>();
+const _triggerRefetch = () => { _refetchFns.forEach(fn => fn()); };
 
 // ============================================================================
 // Queries
@@ -55,10 +56,10 @@ export function useNotificationsList(client?: NotificationsClient) {
     if (c) fetch();
   }, [c, fetch]);
 
-  // Register as the global refetch target so mutations can trigger a refresh
+  // Register as a global refetch target so mutations can trigger a refresh
   useEffect(() => {
-    _refetchNotifications = fetch;
-    return () => { _refetchNotifications = () => {}; };
+    _refetchFns.add(fetch);
+    return () => { _refetchFns.delete(fetch); };
   }, [fetch]);
 
   useEffect(() => {
@@ -109,6 +110,20 @@ export function useUnreadCount(client?: NotificationsClient) {
     if (c) fetch();
   }, [c, fetch]);
 
+  // Register as a global refetch target so mutations can refresh the badge too
+  useEffect(() => {
+    _refetchFns.add(fetch);
+    return () => { _refetchFns.delete(fetch); };
+  }, [fetch]);
+
+  useEffect(() => {
+    if (!c) return;
+    const sub = AppState.addEventListener('change', (state: AppStateStatus) => {
+      if (state === 'active') fetch();
+    });
+    return () => sub.remove();
+  }, [c, fetch]);
+
   return { data, isLoading, refetch: fetch };
 }
 
@@ -132,22 +147,22 @@ export function useNotificationsMutations(client?: NotificationsClient) {
     async (id: string) => {
       if (!c) throw new Error('NotificationsClient not initialized');
       await c.markAsRead(id);
-      _refetchNotifications();
+      _triggerRefetch();
     },
     [c],
   );
 
   const markAllAsRead = useCallback(async () => {
     if (!c) throw new Error('NotificationsClient not initialized');
-    await c.markAllAsRead();
-    _refetchNotifications();
+      await c.markAllAsRead();
+    _triggerRefetch();
   }, [c]);
 
   const removeNotification = useCallback(
     async (id: string) => {
       if (!c) throw new Error('NotificationsClient not initialized');
       await c.removeNotification(id);
-      _refetchNotifications();
+      _triggerRefetch();
     },
     [c],
   );
@@ -156,7 +171,7 @@ export function useNotificationsMutations(client?: NotificationsClient) {
     async (id: string) => {
       if (!c) throw new Error('NotificationsClient not initialized');
       await c.dismissAction(id);
-      _refetchNotifications();
+      _triggerRefetch();
     },
     [c],
   );
@@ -164,7 +179,7 @@ export function useNotificationsMutations(client?: NotificationsClient) {
   const clearAll = useCallback(async () => {
     if (!c) throw new Error('NotificationsClient not initialized');
     await c.clearAll();
-    _refetchNotifications();
+    _triggerRefetch();
   }, [c]);
 
   return {
@@ -173,7 +188,7 @@ export function useNotificationsMutations(client?: NotificationsClient) {
     removeNotification,
     dismissAction,
     clearAll,
-    invalidate: _refetchNotifications,
+    invalidate: _triggerRefetch,
   };
 }
 
