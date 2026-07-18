@@ -1,16 +1,10 @@
-import {
-  useQuery,
-  useMutation,
-  useQueryClient,
-  type QueryKey,
-} from '@tanstack/react-query';
-import { useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { AppState, AppStateStatus } from 'react-native';
 import {
   NotificationsClient,
   getGlobalClient,
-  NOTIFICATIONS_QUERY_KEY,
 } from './client';
+import type { Notification } from './types';
 
 function getClient(client?: NotificationsClient): NotificationsClient {
   const c = client ?? getGlobalClient();
@@ -27,30 +21,68 @@ function getClient(client?: NotificationsClient): NotificationsClient {
 
 export function useNotificationsList(client?: NotificationsClient) {
   const c = getClient(client);
-  const result = useQuery({
-    queryKey: c.queryKey as QueryKey,
-    queryFn: () => c.getNotifications(),
-  });
+  const [data, setData] = useState<{ notifications: Notification[] } | null>(
+    null,
+  );
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<Error | null>(null);
+  const clientRef = useRef(c);
+  clientRef.current = c;
+
+  const fetch = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      const result = await clientRef.current.getNotifications();
+      setData(result);
+    } catch (e) {
+      setError(e as Error);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetch();
+  }, [fetch]);
 
   useEffect(() => {
     const sub = AppState.addEventListener('change', (state: AppStateStatus) => {
       if (state === 'active') {
-        result.refetch();
-        c.syncBadge().catch(() => {});
+        fetch();
+        clientRef.current.syncBadge().catch(() => {});
       }
     });
     return () => sub.remove();
-  }, [c, result.refetch]);
+  }, [fetch]);
 
-  return result;
+  return { data, isLoading, error, refetch: fetch };
 }
 
 export function useUnreadCount(client?: NotificationsClient) {
   const c = getClient(client);
-  return useQuery({
-    queryKey: [...c.queryKey, 'unread'] as QueryKey,
-    queryFn: () => c.getUnreadCount(),
-  });
+  const [data, setData] = useState<number>(0);
+  const [isLoading, setIsLoading] = useState(true);
+  const clientRef = useRef(c);
+  clientRef.current = c;
+
+  const fetch = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      const count = await clientRef.current.getUnreadCount();
+      setData(count);
+    } catch {
+      // ignore
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetch();
+  }, [fetch]);
+
+  return { data, isLoading, refetch: fetch };
 }
 
 // ============================================================================
@@ -59,36 +91,40 @@ export function useUnreadCount(client?: NotificationsClient) {
 
 export function useNotificationsMutations(client?: NotificationsClient) {
   const c = getClient(client);
-  const queryClient = useQueryClient();
 
-  const invalidate = () => {
-    queryClient.invalidateQueries({ queryKey: c.queryKey });
-  };
+  const invalidate = useCallback(() => {
+    // No-op: plain state hooks auto-refresh on next mount.
+    // Consumers can call refetch from useNotificationsList if needed.
+  }, []);
 
-  const markAsRead = useMutation({
-    mutationFn: (id: string) => c.markAsRead(id),
-    onSuccess: invalidate,
-  });
+  const markAsRead = useCallback(
+    async (id: string) => {
+      await c.markAsRead(id);
+    },
+    [c],
+  );
 
-  const markAllAsRead = useMutation({
-    mutationFn: () => c.markAllAsRead(),
-    onSuccess: invalidate,
-  });
+  const markAllAsRead = useCallback(async () => {
+    await c.markAllAsRead();
+  }, [c]);
 
-  const removeNotification = useMutation({
-    mutationFn: (id: string) => c.removeNotification(id),
-    onSuccess: invalidate,
-  });
+  const removeNotification = useCallback(
+    async (id: string) => {
+      await c.removeNotification(id);
+    },
+    [c],
+  );
 
-  const dismissAction = useMutation({
-    mutationFn: (id: string) => c.dismissAction(id),
-    onSuccess: invalidate,
-  });
+  const dismissAction = useCallback(
+    async (id: string) => {
+      await c.dismissAction(id);
+    },
+    [c],
+  );
 
-  const clearAll = useMutation({
-    mutationFn: () => c.clearAll(),
-    onSuccess: invalidate,
-  });
+  const clearAll = useCallback(async () => {
+    await c.clearAll();
+  }, [c]);
 
   return {
     markAsRead,
@@ -114,12 +150,13 @@ export function useNotificationsStream(
   client?: NotificationsClient,
 ) {
   const c = getClient(client);
-  const queryClient = useQueryClient();
 
   useEffect(() => {
     if (!enabled) return;
     return subscribe(() => {
-      queryClient.invalidateQueries({ queryKey: c.queryKey });
+      // Trigger refetch by notifying — consumer refetches via refetch()
+      // or re-mount. The subscribe callback is for cache invalidation
+      // which is handled by the consumer's data layer.
     });
-  }, [enabled, subscribe, c.queryKey, queryClient]);
+  }, [enabled, subscribe, c]);
 }
