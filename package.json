@@ -1,0 +1,62 @@
+{
+  "name": "@teincfood/rn-notifications",
+  "version": "0.1.0",
+  "description": "React Native notification library for TeincFood — handles FCM push, Notifee, expo-notifications, badge sync, channels, tap handling, and push token registration out of the box.",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "sounds",
+    "app.plugin.js"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "prepublishOnly": "npm run build"
+  },
+  "dependencies": {},
+  "peerDependencies": {
+    "@tanstack/react-query": ">=5.0.0",
+    "expo": ">=52.0.0",
+    "@notifee/react-native": ">=9.0.0",
+    "@react-native-firebase/app": ">=21.0.0",
+    "@react-native-firebase/messaging": ">=21.0.0",
+    "expo-crypto": ">=12.0.0",
+    "expo-live-activity": ">=0.4.0",
+    "expo-notifications": ">=0.28.0",
+    "react": ">=18.0.0",
+    "react-native": ">=0.72.0"
+  },
+  "peerDependenciesMeta": {
+    "expo-crypto": {
+      "optional": true
+    },
+    "expo-live-activity": {
+      "optional": true
+    },
+    "react": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@notifee/react-native": "^9.1.8",
+    "@react-native-firebase/app": "^21.14.0",
+    "@react-native-firebase/messaging": "^21.14.0",
+    "@types/react": "^19.0.0",
+    "expo-crypto": "~14.0.1",
+    "expo-live-activity": "~0.4.2",
+    "expo-notifications": "~0.29.0",
+    "react": "19.0.0",
+    "react-native": "^0.76.0",
+    "typescript": "^5.8.0",
+    "@tanstack/react-query": "^5.0.0"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/teincsolutions/teincfood-rn-notifications.git"
+  },
+  "bugs": {
+    "url": "https://github.com/teincsolutions/teincfood-rn-notifications/issues"
+  },
+  "homepage": "https://github.com/teincsolutions/teincfood-rn-notifications#readme"
+}
