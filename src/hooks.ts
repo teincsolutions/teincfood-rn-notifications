@@ -8,6 +8,12 @@ import {
 import type { Notification } from './types';
 
 // ============================================================================
+// Global refetch bridge — mutations trigger list refetch without coupling
+// ============================================================================
+
+let _refetchNotifications: () => void = () => {};
+
+// ============================================================================
 // Queries
 // ============================================================================
 
@@ -48,6 +54,12 @@ export function useNotificationsList(client?: NotificationsClient) {
   useEffect(() => {
     if (c) fetch();
   }, [c, fetch]);
+
+  // Register as the global refetch target so mutations can trigger a refresh
+  useEffect(() => {
+    _refetchNotifications = fetch;
+    return () => { _refetchNotifications = () => {}; };
+  }, [fetch]);
 
   useEffect(() => {
     if (!c) return;
@@ -120,6 +132,7 @@ export function useNotificationsMutations(client?: NotificationsClient) {
     async (id: string) => {
       if (!c) throw new Error('NotificationsClient not initialized');
       await c.markAsRead(id);
+      _refetchNotifications();
     },
     [c],
   );
@@ -127,12 +140,14 @@ export function useNotificationsMutations(client?: NotificationsClient) {
   const markAllAsRead = useCallback(async () => {
     if (!c) throw new Error('NotificationsClient not initialized');
     await c.markAllAsRead();
+    _refetchNotifications();
   }, [c]);
 
   const removeNotification = useCallback(
     async (id: string) => {
       if (!c) throw new Error('NotificationsClient not initialized');
       await c.removeNotification(id);
+      _refetchNotifications();
     },
     [c],
   );
@@ -141,6 +156,7 @@ export function useNotificationsMutations(client?: NotificationsClient) {
     async (id: string) => {
       if (!c) throw new Error('NotificationsClient not initialized');
       await c.dismissAction(id);
+      _refetchNotifications();
     },
     [c],
   );
@@ -148,6 +164,7 @@ export function useNotificationsMutations(client?: NotificationsClient) {
   const clearAll = useCallback(async () => {
     if (!c) throw new Error('NotificationsClient not initialized');
     await c.clearAll();
+    _refetchNotifications();
   }, [c]);
 
   return {
@@ -156,7 +173,7 @@ export function useNotificationsMutations(client?: NotificationsClient) {
     removeNotification,
     dismissAction,
     clearAll,
-    invalidate: () => {},
+    invalidate: _refetchNotifications,
   };
 }
 

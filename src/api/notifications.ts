@@ -1,6 +1,34 @@
 import type { HttpClient } from '../http';
 import type { Notification, UnreadCount } from '../types';
 
+interface BackendNotification {
+  id: string;
+  title: string;
+  body: string;
+  type: string;
+  is_read: boolean;
+  inserted_at: string;
+  payload: Record<string, unknown> | null;
+  action_dismissed?: boolean;
+  updated_at?: string;
+}
+
+function mapNotification(n: BackendNotification): Notification {
+  return {
+    id: n.id,
+    title: n.title,
+    body: n.body,
+    message: n.body,
+    read: n.is_read,
+    action_dismissed: n.action_dismissed ?? false,
+    data: n.payload,
+    payload: n.payload,
+    type: n.type,
+    created_at: n.inserted_at,
+    updated_at: n.updated_at ?? n.inserted_at,
+  };
+}
+
 export interface NotificationsApi {
   getNotifications(): Promise<{ notifications: Notification[] }>;
   getUnreadCount(): Promise<UnreadCount>;
@@ -13,32 +41,38 @@ export interface NotificationsApi {
 
 export function createNotificationsApi(http: HttpClient): NotificationsApi {
   return {
-    getNotifications(): Promise<{ notifications: Notification[] }> {
-      return http.get('/notifications');
+    async getNotifications(): Promise<{ notifications: Notification[] }> {
+      const response = await http.get<{
+        data: { notifications: BackendNotification[] };
+      }>('/notifications');
+      return { notifications: response.data.notifications.map(mapNotification) };
     },
 
-    getUnreadCount(): Promise<UnreadCount> {
-      return http.get('/notifications/unread-count');
+    async getUnreadCount(): Promise<UnreadCount> {
+      const response = await http.get<{
+        data: { count: number };
+      }>('/notifications/unread-count');
+      return { count: response.data.count };
     },
 
-    markAsRead(id: string): Promise<void> {
-      return http.post(`/notifications/${id}/mark-read`);
+    async markAsRead(id: string): Promise<void> {
+      await http.patch(`/notifications/${id}/read`);
     },
 
-    markAllAsRead(): Promise<void> {
-      return http.post('/notifications/mark-all-read');
+    async markAllAsRead(): Promise<void> {
+      await http.patch('/notifications/read-all');
     },
 
-    removeNotification(id: string): Promise<void> {
-      return http.delete(`/notifications/${id}`);
+    async removeNotification(id: string): Promise<void> {
+      await http.delete(`/notifications/${id}`);
     },
 
-    dismissAction(id: string): Promise<void> {
-      return http.post(`/notifications/${id}/dismiss-action`);
+    async dismissAction(id: string): Promise<void> {
+      await http.patch(`/notifications/${id}/dismiss-action`);
     },
 
-    clearAll(): Promise<void> {
-      return http.delete('/notifications');
+    async clearAll(): Promise<void> {
+      await http.delete('/notifications');
     },
   };
 }

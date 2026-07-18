@@ -4,11 +4,14 @@ export interface Notification {
   id: string;
   title: string;
   body: string;
+  message: string;
   read: boolean;
   action_dismissed: boolean;
   data: Record<string, unknown> | null;
+  payload: Record<string, unknown> | null;
   created_at: string;
   updated_at: string;
+  type: string;
 }
 
 export interface UnreadCount {
