@@ -3,37 +3,40 @@ import { AppState, AppStateStatus } from 'react-native';
 import {
   NotificationsClient,
   getGlobalClient,
+  onClientReady,
 } from './client';
 import type { Notification } from './types';
-
-function getClient(client?: NotificationsClient): NotificationsClient {
-  const c = client ?? getGlobalClient();
-  if (!c)
-    throw new Error(
-      'NotificationsClient not initialized. Call setupNotifications() first.',
-    );
-  return c;
-}
 
 // ============================================================================
 // Queries
 // ============================================================================
 
 export function useNotificationsList(client?: NotificationsClient) {
-  const c = getClient(client);
+  const [c, setC] = useState<NotificationsClient | null>(
+    client ?? getGlobalClient(),
+  );
   const [data, setData] = useState<{ notifications: Notification[] } | null>(
     null,
   );
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(!c);
   const [error, setError] = useState<Error | null>(null);
-  const clientRef = useRef(c);
-  clientRef.current = c;
+  const cRef = useRef(c);
+  cRef.current = c;
+
+  useEffect(() => {
+    if (c) return;
+    return onClientReady(() => {
+      setC(getGlobalClient());
+    });
+  }, []);
 
   const fetch = useCallback(async () => {
+    const ch = cRef.current;
+    if (!ch) return;
     try {
       setIsLoading(true);
       setError(null);
-      const result = await clientRef.current.getNotifications();
+      const result = await ch.getNotifications();
       setData(result);
     } catch (e) {
       setError(e as Error);
@@ -43,33 +46,45 @@ export function useNotificationsList(client?: NotificationsClient) {
   }, []);
 
   useEffect(() => {
-    fetch();
-  }, [fetch]);
+    if (c) fetch();
+  }, [c, fetch]);
 
   useEffect(() => {
+    if (!c) return;
     const sub = AppState.addEventListener('change', (state: AppStateStatus) => {
       if (state === 'active') {
         fetch();
-        clientRef.current.syncBadge().catch(() => {});
+        cRef.current?.syncBadge().catch(() => {});
       }
     });
     return () => sub.remove();
-  }, [fetch]);
+  }, [c, fetch]);
 
   return { data, isLoading, error, refetch: fetch };
 }
 
 export function useUnreadCount(client?: NotificationsClient) {
-  const c = getClient(client);
+  const [c, setC] = useState<NotificationsClient | null>(
+    client ?? getGlobalClient(),
+  );
   const [data, setData] = useState<number>(0);
-  const [isLoading, setIsLoading] = useState(true);
-  const clientRef = useRef(c);
-  clientRef.current = c;
+  const [isLoading, setIsLoading] = useState(!c);
+  const cRef = useRef(c);
+  cRef.current = c;
+
+  useEffect(() => {
+    if (c) return;
+    return onClientReady(() => {
+      setC(getGlobalClient());
+    });
+  }, []);
 
   const fetch = useCallback(async () => {
+    const ch = cRef.current;
+    if (!ch) return;
     try {
       setIsLoading(true);
-      const count = await clientRef.current.getUnreadCount();
+      const count = await ch.getUnreadCount();
       setData(count);
     } catch {
       // ignore
@@ -79,8 +94,8 @@ export function useUnreadCount(client?: NotificationsClient) {
   }, []);
 
   useEffect(() => {
-    fetch();
-  }, [fetch]);
+    if (c) fetch();
+  }, [c, fetch]);
 
   return { data, isLoading, refetch: fetch };
 }
@@ -90,26 +105,33 @@ export function useUnreadCount(client?: NotificationsClient) {
 // ============================================================================
 
 export function useNotificationsMutations(client?: NotificationsClient) {
-  const c = getClient(client);
+  const [c, setC] = useState<NotificationsClient | null>(
+    client ?? getGlobalClient(),
+  );
 
-  const invalidate = useCallback(() => {
-    // No-op: plain state hooks auto-refresh on next mount.
-    // Consumers can call refetch from useNotificationsList if needed.
+  useEffect(() => {
+    if (c) return;
+    return onClientReady(() => {
+      setC(getGlobalClient());
+    });
   }, []);
 
   const markAsRead = useCallback(
     async (id: string) => {
+      if (!c) throw new Error('NotificationsClient not initialized');
       await c.markAsRead(id);
     },
     [c],
   );
 
   const markAllAsRead = useCallback(async () => {
+    if (!c) throw new Error('NotificationsClient not initialized');
     await c.markAllAsRead();
   }, [c]);
 
   const removeNotification = useCallback(
     async (id: string) => {
+      if (!c) throw new Error('NotificationsClient not initialized');
       await c.removeNotification(id);
     },
     [c],
@@ -117,12 +139,14 @@ export function useNotificationsMutations(client?: NotificationsClient) {
 
   const dismissAction = useCallback(
     async (id: string) => {
+      if (!c) throw new Error('NotificationsClient not initialized');
       await c.dismissAction(id);
     },
     [c],
   );
 
   const clearAll = useCallback(async () => {
+    if (!c) throw new Error('NotificationsClient not initialized');
     await c.clearAll();
   }, [c]);
 
@@ -132,7 +156,7 @@ export function useNotificationsMutations(client?: NotificationsClient) {
     removeNotification,
     dismissAction,
     clearAll,
-    invalidate,
+    invalidate: () => {},
   };
 }
 

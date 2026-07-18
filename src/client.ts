@@ -14,13 +14,30 @@ import type { Notification, NotificationPreferences } from './types';
 export const NOTIFICATIONS_QUERY_KEY = ['notifications'];
 
 let _globalClient: NotificationsClient | null = null;
+let _readyListeners: Array<() => void> = [];
 
 export function setGlobalClient(client: NotificationsClient | null) {
   _globalClient = client;
+  if (client) {
+    const listeners = _readyListeners;
+    _readyListeners = [];
+    listeners.forEach((fn) => fn());
+  }
 }
 
 export function getGlobalClient(): NotificationsClient | null {
   return _globalClient;
+}
+
+export function onClientReady(fn: () => void): () => void {
+  if (_globalClient) {
+    fn();
+    return () => {};
+  }
+  _readyListeners.push(fn);
+  return () => {
+    _readyListeners = _readyListeners.filter((l) => l !== fn);
+  };
 }
 
 export class NotificationsClient {
