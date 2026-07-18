@@ -12,7 +12,6 @@ npm install @teincfood/rn-notifications
 
 Ensure the following are installed in your project:
 
-- `@tanstack/react-query >= 5`
 - `expo >= 52`
 - `@notifee/react-native >= 9`
 - `@react-native-firebase/app >= 21`
@@ -84,14 +83,18 @@ const { data, isLoading } = useNotificationsList();
 // Get unread count
 const { data: unreadCount } = useUnreadCount();
 
-// Mutations
+// Mutations (plain async functions — use try/catch or .catch)
 const { markAsRead, markAllAsRead, removeNotification, clearAll } = useNotificationsMutations();
 
-// Real-time stream
+// Real-time stream (connect your app's events service to trigger refetch)
+const { refetch } = useNotificationsList();
 useNotificationsStream(
   (cb) => {
     const disconnect = eventsService.connect(userId);
-    const unsub = eventsService.on('notification_created', cb);
+    const unsub = eventsService.on('notification_created', () => {
+      cb(); // triggers the stream
+      refetch(); // re-fetch notifications
+    });
     return () => { unsub(); disconnect(); };
   },
   isAuthenticated,
