@@ -26,8 +26,10 @@ export function useNotificationsList(client?: NotificationsClient) {
     null,
   );
   const [isLoading, setIsLoading] = useState(!c);
+  const [isRefetching, setIsRefetching] = useState(false);
   const [error, setError] = useState<Error | null>(null);
   const cRef = useRef(c);
+  const initialLoadRef = useRef(true);
   cRef.current = c;
 
   useEffect(() => {
@@ -37,11 +39,24 @@ export function useNotificationsList(client?: NotificationsClient) {
     });
   }, []);
 
-  const fetch = useCallback(async () => {
+  const silentFetch = useCallback(async () => {
     const ch = cRef.current;
     if (!ch) return;
     try {
-      setIsLoading(true);
+      const result = await ch.getNotifications();
+      setData(result);
+    } catch {
+      // silent — no loading state toggling
+    }
+  }, []);
+
+  const fetch = useCallback(async () => {
+    const ch = cRef.current;
+    if (!ch) return;
+    const isInitial = initialLoadRef.current;
+    try {
+      if (isInitial) setIsLoading(true);
+      else setIsRefetching(true);
       setError(null);
       const result = await ch.getNotifications();
       setData(result);
@@ -49,6 +64,8 @@ export function useNotificationsList(client?: NotificationsClient) {
       setError(e as Error);
     } finally {
       setIsLoading(false);
+      setIsRefetching(false);
+      initialLoadRef.current = false;
     }
   }, []);
 
@@ -56,11 +73,11 @@ export function useNotificationsList(client?: NotificationsClient) {
     if (c) fetch();
   }, [c, fetch]);
 
-  // Register as a global refetch target so mutations can trigger a refresh
+  // Register silent fetch for mutation-triggered refetches (no UI flicker)
   useEffect(() => {
-    _refetchFns.add(fetch);
-    return () => { _refetchFns.delete(fetch); };
-  }, [fetch]);
+    _refetchFns.add(silentFetch);
+    return () => { _refetchFns.delete(silentFetch); };
+  }, [silentFetch]);
 
   useEffect(() => {
     if (!c) return;
@@ -73,7 +90,7 @@ export function useNotificationsList(client?: NotificationsClient) {
     return () => sub.remove();
   }, [c, fetch]);
 
-  return { data, isLoading, error, refetch: fetch };
+  return { data, isLoading, isRefetching, error, refetch: fetch };
 }
 
 export function useUnreadCount(client?: NotificationsClient) {
@@ -90,6 +107,17 @@ export function useUnreadCount(client?: NotificationsClient) {
     return onClientReady(() => {
       setC(getGlobalClient());
     });
+  }, []);
+
+  const silentFetch = useCallback(async () => {
+    const ch = cRef.current;
+    if (!ch) return;
+    try {
+      const count = await ch.getUnreadCount();
+      setData(count);
+    } catch {
+      // silent
+    }
   }, []);
 
   const fetch = useCallback(async () => {
@@ -110,11 +138,11 @@ export function useUnreadCount(client?: NotificationsClient) {
     if (c) fetch();
   }, [c, fetch]);
 
-  // Register as a global refetch target so mutations can refresh the badge too
+  // Register silent fetch for mutation-triggered refetches (no UI flicker)
   useEffect(() => {
-    _refetchFns.add(fetch);
-    return () => { _refetchFns.delete(fetch); };
-  }, [fetch]);
+    _refetchFns.add(silentFetch);
+    return () => { _refetchFns.delete(silentFetch); };
+  }, [silentFetch]);
 
   useEffect(() => {
     if (!c) return;
