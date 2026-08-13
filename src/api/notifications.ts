@@ -1,6 +1,23 @@
 import type { HttpClient } from '../http';
 import type { Notification, UnreadCount } from '../types';
 
+export interface PaginationMeta {
+  page: number;
+  page_size: number;
+  total_entries: number;
+  total_pages: number;
+}
+
+export interface NotificationsPage {
+  notifications: Notification[];
+  pagination: PaginationMeta;
+}
+
+export interface ListNotificationsOptions {
+  page?: number;
+  page_size?: number;
+}
+
 interface BackendNotification {
   id: string;
   title: string;
@@ -30,7 +47,7 @@ function mapNotification(n: BackendNotification): Notification {
 }
 
 export interface NotificationsApi {
-  getNotifications(): Promise<{ notifications: Notification[] }>;
+  getNotifications(options?: ListNotificationsOptions): Promise<NotificationsPage>;
   getUnreadCount(): Promise<UnreadCount>;
   markAsRead(id: string): Promise<void>;
   markAllAsRead(): Promise<void>;
@@ -41,11 +58,21 @@ export interface NotificationsApi {
 
 export function createNotificationsApi(http: HttpClient): NotificationsApi {
   return {
-    async getNotifications(): Promise<{ notifications: Notification[] }> {
+    async getNotifications(
+      options?: ListNotificationsOptions,
+    ): Promise<NotificationsPage> {
+      const config =
+        options && (options.page != null || options.page_size != null)
+          ? { params: { page: options.page, page_size: options.page_size } }
+          : undefined;
       const response = await http.get<{
         data: { notifications: BackendNotification[] };
-      }>('/notifications');
-      return { notifications: response.data.notifications.map(mapNotification) };
+        pagination: PaginationMeta;
+      }>('/notifications', config);
+      return {
+        notifications: response.data.notifications.map(mapNotification),
+        pagination: response.pagination,
+      };
     },
 
     async getUnreadCount(): Promise<UnreadCount> {

@@ -35,6 +35,14 @@ export async function setupNotifications(
     navigateToRoute,
   } = options;
 
+  // Create and publish the in-app notification client FIRST so list/query hooks
+  // can fetch regardless of push permission, FCM token, or token registration
+  // state. Previously the client was only published after all push setup
+  // succeeded, which left useNotificationsList stuck loading forever when the
+  // user denied notification permission (or FCM registration failed).
+  const client = new NotificationsClient(http);
+  setGlobalClient(client);
+
   if (Platform.OS === 'android') {
     await createNotificationChannels();
   }
@@ -52,27 +60,32 @@ export async function setupNotifications(
     onActionPress,
   });
 
-  const permission = await ExpoNotifications.requestPermissionsAsync();
-  const granted =
-    (permission as { granted?: boolean }).granted ??
-    (permission as { status?: string }).status === 'granted';
-  if (!granted) {
+  try {
+    const permission = await ExpoNotifications.requestPermissionsAsync();
+    const granted =
+      (permission as { granted?: boolean }).granted ??
+      (permission as { status?: string }).status === 'granted';
+    if (!granted) {
+      cleanupPushHandlers();
+      throw new Error('Notification permission not granted');
+    }
+
+    const fcmToken = await messaging().getToken();
+    const payload = buildTokenRegistrationPayload(fcmToken, appType);
+    await http.post('/devices/push-token', payload);
+
+    messaging().onTokenRefresh(async (token) => {
+      const refreshed = buildTokenRegistrationPayload(token, appType);
+      await http.post('/devices/push-token', refreshed);
+    });
+
+    setupTapHandlers({ onNotificationTapped, navigateToRoute });
+  } catch (e) {
+    // Push setup must never block the in-app notification list — the client is
+    // already published above. Surface the failure so the caller can log it.
     cleanupPushHandlers();
-    throw new Error('Notification permission not granted');
+    throw e;
   }
 
-  const fcmToken = await messaging().getToken();
-  const payload = buildTokenRegistrationPayload(fcmToken, appType);
-  await http.post('/devices/push-token', payload);
-
-  messaging().onTokenRefresh(async (token) => {
-    const refreshed = buildTokenRegistrationPayload(token, appType);
-    await http.post('/devices/push-token', refreshed);
-  });
-
-  setupTapHandlers({ onNotificationTapped, navigateToRoute });
-
-  const client = new NotificationsClient(http);
-  setGlobalClient(client);
   return client;
 }

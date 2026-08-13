@@ -23,3 +23,8 @@ export type {
   TokenRegistrationPayload,
 } from './types';
 export type { HttpClient } from './http';
+export type {
+  PaginationMeta,
+  NotificationsPage,
+  ListNotificationsOptions,
+} from './api/notifications';

@@ -5,6 +5,7 @@ import {
   getGlobalClient,
   onClientReady,
 } from './client';
+import type { PaginationMeta } from './api/notifications';
 import type { Notification } from './types';
 
 // ============================================================================
@@ -18,18 +19,23 @@ const _triggerRefetch = () => { _refetchFns.forEach(fn => fn()); };
 // Queries
 // ============================================================================
 
-export function useNotificationsList(client?: NotificationsClient) {
+export function useNotificationsList(
+  client?: NotificationsClient,
+  options?: { pageSize?: number },
+) {
   const [c, setC] = useState<NotificationsClient | null>(
     client ?? getGlobalClient(),
   );
-  const [data, setData] = useState<{ notifications: Notification[] } | null>(
-    null,
-  );
-  const [isLoading, setIsLoading] = useState(!c);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [pagination, setPagination] = useState<PaginationMeta | null>(null);
+  // Starts false — never blocks the UI on client readiness (a missing client
+  // previously left isLoading true forever).
+  const [isLoading, setIsLoading] = useState(false);
   const [isRefetching, setIsRefetching] = useState(false);
+  const [isFetchingNextPage, setIsFetchingNextPage] = useState(false);
   const [error, setError] = useState<Error | null>(null);
   const cRef = useRef(c);
-  const initialLoadRef = useRef(true);
+  const pageSize = options?.pageSize ?? 20;
   cRef.current = c;
 
   useEffect(() => {
@@ -43,35 +49,66 @@ export function useNotificationsList(client?: NotificationsClient) {
     const ch = cRef.current;
     if (!ch) return;
     try {
-      const result = await ch.getNotifications();
-      setData(result);
+      const result = await ch.getNotifications({ page: 1, page_size: pageSize });
+      setNotifications(result.notifications);
+      setPagination(result.pagination);
     } catch {
       // silent — no loading state toggling
     }
-  }, []);
+  }, [pageSize]);
 
-  const fetch = useCallback(async () => {
-    const ch = cRef.current;
-    if (!ch) return;
-    const isInitial = initialLoadRef.current;
-    try {
-      if (isInitial) setIsLoading(true);
-      else setIsRefetching(true);
-      setError(null);
-      const result = await ch.getNotifications();
-      setData(result);
-    } catch (e) {
-      setError(e as Error);
-    } finally {
-      setIsLoading(false);
-      setIsRefetching(false);
-      initialLoadRef.current = false;
-    }
-  }, []);
+  const fetch = useCallback(
+    async (page: number, mode: 'initial' | 'refresh' | 'next') => {
+      const ch = cRef.current;
+      if (!ch) return;
+      try {
+        if (mode === 'initial') setIsLoading(true);
+        else if (mode === 'refresh') setIsRefetching(true);
+        else setIsFetchingNextPage(true);
+        setError(null);
+        const result = await ch.getNotifications({
+          page,
+          page_size: pageSize,
+        });
+        if (mode === 'next') {
+          setNotifications((prev) => {
+            const seen = new Set(prev.map((n) => n.id));
+            return [
+              ...prev,
+              ...result.notifications.filter((n) => !seen.has(n.id)),
+            ];
+          });
+        } else {
+          setNotifications(result.notifications);
+        }
+        setPagination(result.pagination);
+      } catch (e) {
+        setError(e as Error);
+      } finally {
+        setIsLoading(false);
+        setIsRefetching(false);
+        setIsFetchingNextPage(false);
+      }
+    },
+    [pageSize],
+  );
 
   useEffect(() => {
-    if (c) fetch();
+    if (c) fetch(1, 'initial');
   }, [c, fetch]);
+
+  const fetchNextPage = useCallback(() => {
+    if (
+      !pagination ||
+      pagination.page >= pagination.total_pages ||
+      isFetchingNextPage
+    ) {
+      return;
+    }
+    fetch(pagination.page + 1, 'next');
+  }, [fetch, pagination, isFetchingNextPage]);
+
+  const refetch = useCallback(() => fetch(1, 'refresh'), [fetch]);
 
   // Register silent fetch for mutation-triggered refetches (no UI flicker)
   useEffect(() => {
@@ -83,14 +120,25 @@ export function useNotificationsList(client?: NotificationsClient) {
     if (!c) return;
     const sub = AppState.addEventListener('change', (state: AppStateStatus) => {
       if (state === 'active') {
-        fetch();
+        refetch();
         cRef.current?.syncBadge().catch(() => {});
       }
     });
     return () => sub.remove();
-  }, [c, fetch]);
+  }, [c, refetch]);
 
-  return { data, isLoading, isRefetching, error, refetch: fetch };
+  return {
+    data: notifications.length > 0 ? { notifications } : null,
+    isLoading,
+    isRefetching,
+    isFetchingNextPage,
+    error,
+    refetch,
+    fetchNextPage,
+    hasNextPage: pagination
+      ? pagination.page < pagination.total_pages
+      : false,
+  };
 }
 
 export function useUnreadCount(client?: NotificationsClient) {

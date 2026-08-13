@@ -2,6 +2,8 @@ import type { HttpClient } from './http';
 import {
   createNotificationsApi,
   type NotificationsApi,
+  type NotificationsPage,
+  type ListNotificationsOptions,
 } from './api/notifications';
 import { createDevicesApi, type DevicesApi } from './api/devices';
 import {
@@ -9,7 +11,7 @@ import {
   type NotificationPreferencesApi,
 } from './api/preferences';
 import { BadgeManager } from './badge';
-import type { Notification, NotificationPreferences } from './types';
+import type { NotificationPreferences } from './types';
 
 export const NOTIFICATIONS_QUERY_KEY = ['notifications'];
 
@@ -60,8 +62,10 @@ export class NotificationsClient {
 
   // Notifications
 
-  async getNotifications(): Promise<{ notifications: Notification[] }> {
-    return this.api.getNotifications();
+  async getNotifications(
+    options?: ListNotificationsOptions,
+  ): Promise<NotificationsPage> {
+    return this.api.getNotifications(options);
   }
 
   async getUnreadCount(): Promise<number> {
