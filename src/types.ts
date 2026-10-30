@@ -20,10 +20,13 @@ export interface UnreadCount {
 
 export interface PushDataPayload {
   type: string;
+  route?: string;
+  app_type?: AppType | 'rider' | string;
   order_id?: string;
   delivery_id?: string;
   conversation_id?: string;
   context?: 'buyer' | 'seller' | 'rider';
+  action_type?: string;
   [key: string]: unknown;
 }
 
@@ -69,14 +72,37 @@ export interface NotificationAction {
 }
 
 export function buildNotificationRoute(payload: PushDataPayload): string | null {
-  if (payload.context === 'buyer') {
-    return payload.order_id ? `/track/${payload.order_id}` : null;
+  // The backend may already provide a resolved route. Prefer it so the
+  // sender can target a role-specific screen without the client guessing.
+  if (typeof payload.route === 'string' && payload.route.length > 0) {
+    return payload.route;
   }
-  if (payload.context === 'seller') {
-    return payload.order_id ? `/order/${payload.order_id}` : null;
+
+  const context =
+    payload.context ??
+    (payload.app_type === 'buyer'
+      ? 'buyer'
+      : payload.app_type === 'rider'
+        ? 'rider'
+        : payload.app_type === 'business'
+          ? 'seller'
+          : undefined);
+
+  const orderId = payload.order_id;
+  const deliveryId = payload.delivery_id;
+
+  if (context === 'buyer') {
+    return orderId ? `/track/${orderId}` : null;
   }
-  if (payload.context === 'rider') {
-    return payload.delivery_id ? `/deliveries/${payload.delivery_id}` : null;
+
+  if (context === 'seller') {
+    return orderId ? `/orders/${orderId}` : null;
   }
+
+  if (context === 'rider') {
+    const id = deliveryId ?? orderId;
+    return id ? `/deliveries/${id}` : null;
+  }
+
   return null;
 }
