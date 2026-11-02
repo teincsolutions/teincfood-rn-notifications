@@ -14,6 +14,8 @@ export interface IncomingNotification {
 export interface TapHandlerOptions {
   onNotificationTapped?: (payload: PushDataPayload | null) => void;
   navigateToRoute?: (route: string) => void;
+  /** Audience of the host app, used when the payload has no app_type. */
+  fallbackAppType?: string;
 }
 
 function extractExpoPayload(
@@ -35,7 +37,7 @@ export function setupTapHandlers(options: TapHandlerOptions): () => void {
       options.onNotificationTapped?.(payload);
 
       if (payload && options.navigateToRoute) {
-        const route = buildNotificationRoute(payload);
+        const route = buildNotificationRoute(payload, options.fallbackAppType);
         if (route) {
           options.navigateToRoute(route);
         }
@@ -51,7 +53,7 @@ export function setupTapHandlers(options: TapHandlerOptions): () => void {
     options.onNotificationTapped?.(payload);
 
     if (payload && options.navigateToRoute) {
-      const route = buildNotificationRoute(payload);
+      const route = buildNotificationRoute(payload, options.fallbackAppType);
       if (route) {
         options.navigateToRoute(route);
       }
@@ -63,9 +65,11 @@ export function setupTapHandlers(options: TapHandlerOptions): () => void {
     if (!event?.pressAction?.id) return;
     const data = (event.notification?.data || {}) as PushNotificationData;
     if (event.pressAction.id) {
-      options.onNotificationTapped?.(data as unknown as PushDataPayload);
-      if (options.navigateToRoute && data.route) {
-        options.navigateToRoute(data.route);
+      const payload = data as unknown as PushDataPayload;
+      options.onNotificationTapped?.(payload);
+      if (options.navigateToRoute) {
+        const route = buildNotificationRoute(payload, options.fallbackAppType);
+        if (route) options.navigateToRoute(route);
       }
     }
   });

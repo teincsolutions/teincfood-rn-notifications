@@ -21,6 +21,11 @@ export interface SetupOptions {
   onActionPress?: (actionId: string, data: PushNotificationData) => void;
   onNotificationTapped?: (payload: PushDataPayload | null) => void;
   navigateToRoute?: (route: string) => void;
+  /**
+   * Audience used to resolve payloads that omit `app_type`. Defaults to the
+   * token-registration app type.
+   */
+  fallbackAppType?: AppType | 'rider';
 }
 
 export async function setupNotifications(
@@ -33,6 +38,7 @@ export async function setupNotifications(
     onActionPress,
     onNotificationTapped,
     navigateToRoute,
+    fallbackAppType = appType,
   } = options;
 
   // Create and publish the in-app notification client FIRST so list/query hooks
@@ -79,7 +85,7 @@ export async function setupNotifications(
       await http.post('/devices/push-token', refreshed);
     });
 
-    setupTapHandlers({ onNotificationTapped, navigateToRoute });
+    setupTapHandlers({ onNotificationTapped, navigateToRoute, fallbackAppType });
   } catch (e) {
     // Push setup must never block the in-app notification list — the client is
     // already published above. Surface the failure so the caller can log it.
